@@ -1,4 +1,4 @@
-package com.example.pleosprobe
+package app.baton
 
 import org.json.JSONArray
 import org.json.JSONObject
@@ -12,6 +12,7 @@ class TripLog(dir: File) {
         val startTs: Long, val endTs: Long, val km: Double?, val flags: List<String>,
         val socEnd: Int?, val socDelta: Double?, val rangeEndM: Double?,
         val telltalesEnd: List<String>, val telltalesOn: List<String>, val telltalesOff: List<String>,
+    val telltalesKnown: Boolean,  // 종료 때 경고등을 읽었는지. 못 읽었으면 빈 목록이 "경고 없음"이 아니다
     )
     data class Note(val tripStartTs: Long, val ts: Long, val driver: String?, val items: List<String>, val text: String?)
     data class Gap(val detectedTs: Long, val km: Double)
@@ -41,6 +42,7 @@ class TripLog(dir: File) {
             r.getLong("startTs"), r.getLong("endTs"), r.optDoubleOrNull("km"), r.optJSONArray("flags").strings(),
             end?.optDoubleOrNull("soc")?.toInt(), d?.optDoubleOrNull("soc"), end?.optDoubleOrNull("rangeM"),
             end?.optJSONArray("telltales").strings(), d?.optJSONArray("telltalesOn").strings(), d?.optJSONArray("telltalesOff").strings(),
+            end?.optJSONArray("telltales") != null,
         )
     }
 

@@ -4,7 +4,7 @@
     <!-- Pleos Vehicle SDK: 공개 권한 -->
     <uses-permission android:name="pleos.car.permission.CAR_SAFETY" />
     <uses-permission android:name="pleos.car.permission.CAR_DRIVE" />
-    <!-- Pleos Vehicle SDK: 비공개 권한 (부여 여부 자체가 점검 대상) -->
+    <!-- Pleos Vehicle SDK: 비공개 권한. 경고등 조회(getTelltalesInfo)가 실행 시 이 권한을 요구한다(SDK 표기는 CAR_SAFETY, 11/4 release 빌드에서 확인) -->
     <uses-permission android:name="pleos.car.permission.PRIVATE_CAR_SAFETY" />
 
     <!-- Pleos NaviHelper -->
@@ -42,11 +42,12 @@
     <uses-feature android:name="android.hardware.type.automotive" android:required="true" />
 
     <application
-        android:label="Pleos Probe"
+        android:label="바통"
         android:theme="@android:style/Theme.DeviceDefault">
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:label="Pleos Probe">
             <!-- 점검 중 주행 상태에서도 화면이 가려지지 않게 함 (점검 전용) -->
             <meta-data android:name="distractionOptimized" android:value="true" />
             <intent-filter>
@@ -71,7 +72,7 @@
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="vehicle trip logging spike" />
+                android:value="vehicle trip logging" />
         </service>
         <receiver
             android:name=".BootReceiver"

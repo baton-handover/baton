@@ -7,11 +7,11 @@
 #   scripts/demo_scenario.sh --auto OUT 멈추지 않고 메모도 자동으로 눌러, 단계별 캡처를 OUT 폴더에 남긴다(검증용)
 #
 # 전제: AVD Pleos_Connect_v2.1.0 이 emulator-5554 로 떠 있고 바통 앱이 설치돼 있다.
-# 주의: 앱의 운행 기록(b1_records.jsonl, b1_state.json)을 지우고 시작한다.
+# 주의: 앱 데이터(운행 기록·메모·로그)를 모두 지우고 시작한다. debug·release 빌드 모두 동작한다.
 set -euo pipefail
 
 ADB="adb -s ${DEVICE:-emulator-5554}"
-PKG=com.example.pleosprobe
+PKG=app.baton
 C=http://127.0.0.1:8088
 AUTO=0; OUT=""
 if [ "${1:-}" = "--auto" ]; then AUTO=1; OUT="${2:?캡처 폴더를 지정하세요}"; mkdir -p "$OUT"; fi
@@ -71,7 +71,9 @@ memo() {  # memo 운전자 [선택지...]  — 화면에서 직접 누를 내용
 echo "== 준비: 기록 초기화, 차량 값 맞추기"
 gear Park; sleep 1
 $ADB shell am force-stop --user 10 $PKG
-$ADB shell run-as $PKG --user 10 rm -f files/b1_records.jsonl files/b1_state.json
+# release 빌드는 run-as가 안 되므로 앱 데이터를 통째로 비우고 실행 권한을 다시 준다
+$ADB shell pm clear --user 10 $PKG >/dev/null
+for p in android.car.permission.CAR_ENERGY android.permission.POST_NOTIFICATIONS android.permission.RECORD_AUDIO; do $ADB shell pm grant --user 10 $PKG $p; done
 BASE=$(curl -sf "$C/vehicle/state" | python3 -c "import json,sys; print(json.load(sys.stdin)['odometer']['traveled_distance_km'])")
 soc 82; range_km 410; tpms Off
 post "/vehicle/telltales/simulator?type=DoorOpen&state=Off&color=Red"

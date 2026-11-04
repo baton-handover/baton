@@ -29,5 +29,5 @@ Pleos 공모전 사전 점검 앱. 차량 제어(set) API는 호출하지 않는
 
 ```
 adb logcat -s PleosProbe
-adb exec-out run-as com.example.pleosprobe cat files/probe_log.txt > probe_log.txt
+adb exec-out run-as app.baton cat files/probe_log.txt > probe_log.txt
 ```

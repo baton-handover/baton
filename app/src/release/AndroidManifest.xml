@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 제출(release) 빌드: 점검 화면을 런처에서 숨기고, 점검에만 쓰던 권한을 뺀다 -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="pleos.car.permission.CAR_LIGHTS" tools:node="remove" />
+    <uses-permission android:name="pleos.car.permission.NAVI_ROUTE" tools:node="remove" />
+    <uses-permission android:name="pleos.car.permission.NAVI_ROUTE_SEARCH" tools:node="remove" />
+    <uses-permission android:name="android.car.permission.CAR_SPEED" tools:node="remove" />
+    <uses-permission android:name="android.car.permission.CAR_TIRES" tools:node="remove" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" tools:node="remove" />
+    <application>
+        <activity
+            android:name=".MainActivity"
+            android:exported="false"
+            tools:replace="android:exported">
+            <intent-filter tools:node="removeAll" />
+        </activity>
+    </application>
+</manifest>

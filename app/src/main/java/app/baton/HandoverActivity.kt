@@ -1,4 +1,4 @@
-package com.example.pleosprobe
+package app.baton
 
 import ai.pleos.playground.stt.SpeechToText
 import ai.pleos.playground.tts.TextToSpeech
@@ -66,6 +66,10 @@ class HandoverActivity : Activity() {
         super.onCreate(savedInstanceState)
         // 기록 서비스가 아직 없으면 깨운다(부팅 직후 화면부터 연 경우)
         startForegroundService(Intent(this, RecorderService::class.java).putExtra("from", "handover"))
+        // 주행가능거리(CAR_ENERGY), 기록 서비스 알림, 음성 메모에 필요한 실행 권한. 제출 빌드에는 점검 화면이 없어 여기서 받는다
+        val need = arrayOf("android.car.permission.CAR_ENERGY", "android.permission.POST_NOTIFICATIONS", "android.permission.RECORD_AUDIO")
+            .filter { checkSelfPermission(it) != android.content.pm.PackageManager.PERMISSION_GRANTED }
+        if (need.isNotEmpty()) requestPermissions(need.toTypedArray(), 1)
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(cBg); setPadding(dp(32), dp(24), dp(32), dp(24)) }
         val tabRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         listOf("탑승 브리핑", "운행 목록", "하차 메모").forEachIndexed { i, label ->
@@ -170,7 +174,8 @@ class HandoverActivity : Activity() {
         body.addView(card)
 
         val warnings = t.telltalesEnd.map { telltaleNames[it] ?: it }
-        if (warnings.isNotEmpty()) {
+        if (!t.telltalesKnown) body.addView(card().apply { addView(row("경고등", "확인 안 됨")) })
+        else if (warnings.isNotEmpty()) {
             val newOnes = t.telltalesOn.map { telltaleNames[it] ?: it }.toSet()
             val w = card(cWarnBg, cWarn)
             w.addView(label("켜져 있는 경고등", 32f, cWarn, bold = true))
@@ -204,7 +209,8 @@ class HandoverActivity : Activity() {
     private fun briefingSentence(t: TripLog.Trip, note: TripLog.Note?, warnings: List<String>): String {
         val parts = mutableListOf("직전 운행은 ${timeFmt.format(Date(t.endTs))}에 끝났습니다. 아래는 그때 기록한 값입니다.")
         t.socEnd?.let { parts += "종료 당시 배터리는 ${it}퍼센트였습니다." }
-        if (warnings.isNotEmpty()) parts += "종료 당시 확인된 경고등은 ${warnings.joinToString(", ")}입니다."
+        if (!t.telltalesKnown) parts += "경고등은 확인하지 못했습니다."
+        else if (warnings.isNotEmpty()) parts += "종료 당시 확인된 경고등은 ${warnings.joinToString(", ")}입니다."
         if (note == null) parts += "이전 운전자 메모는 없습니다."
         note?.items?.takeIf { it.isNotEmpty() }?.let { parts += "이전 운전자 메모, ${it.joinToString(", ")}." }
         note?.text?.let { parts += it }
