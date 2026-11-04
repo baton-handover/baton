@@ -1,10 +1,89 @@
-# pleos-probe
+# 바통
 
-제품 화면: 런처의 "바통"(HandoverActivity) — 탑승 브리핑 / 운행 목록 / 하차 메모. 점검 화면은 "Pleos Probe"(MainActivity).
+여러 사람이 공용 프로필로 함께 쓰는 Pleos 차량에서, 운행 전후의 주행거리·배터리·경고등을 차량에서 직접 읽어 하차 메모와 함께 기록하고, 다음 운전자가 정차 중 같은 차량 화면에서 직전 운행의 인계 내용을 확인하는 차량용 앱입니다.
 
-시연 시나리오: `scripts/demo_scenario.sh`(단계마다 Enter) 또는 `scripts/demo_scenario.sh --auto 캡처폴더`(자동 실행·캡처). 앱의 운행 기록을 지우고 시작한다.
+## APK 위치
 
-Pleos 공모전 사전 점검 앱. 차량 제어(set) API는 호출하지 않는다.
+`apk/바통_바통_release.apk` (release 빌드, 패키지 `app.baton`)
+
+## 테스트 환경
+
+- Pleos Connect v2.1.0 에뮬레이터(AAOS, AVD `Pleos_Connect_v2.1.0`). 앱은 Android 사용자 10(운전자 프로필)에서 실행됩니다
+- Pleos Playground SDK: Vehicle 2.3.2, TextToSpeech 3.3.1, SpeechToText 3.3.1
+- 차량 값은 에뮬레이터 Virtual Console(`adb forward tcp:8088 tcp:8088` 후 http://127.0.0.1:8088)로 바꿉니다. 앱은 차량 값을 읽기만 하고 차량 제어(set) API는 호출하지 않습니다
+
+## 실행 방법
+
+1. 에뮬레이터를 켠 뒤 APK를 설치합니다.
+
+   ```
+   adb install apk/바통_바통_release.apk
+   ```
+
+2. 런처에서 "바통"을 엽니다. 처음 한 번 자동차 정보(주행가능거리), 알림(기록 서비스 표시), 마이크(음성 메모) 권한을 허용합니다. 이후에는 차량이 켜질 때 화면을 열지 않아도 기록 서비스가 시작됩니다.
+3. Virtual Console에서 기어를 D로 바꾸고 주행거리·배터리 값을 바꾼 뒤 P로 돌아오면 한 운행이 기록됩니다. 주행 중에는 플랫폼이 앱 화면을 가립니다.
+4. 정차 중 바통을 열면 다음 화면을 볼 수 있습니다.
+   - 하차 메모: 방금 끝난 운행에 운전자를 선택하고 상태 선택지를 남깁니다
+   - 탑승 브리핑: 직전 운행 종료 시점의 배터리·주행가능거리·경고등과 이전 운전자 메모
+   - 운행 목록: 이번 달 운행과 월 요약 QR
+
+## 시연 재현
+
+`scripts/demo_scenario.sh`는 Virtual Console을 HTTP로 조작해 시연 장면(운행 3건, 메모 2건, 운행 목록과 QR)을 처음부터 다시 만듭니다. 앱 데이터를 지우고 시작합니다.
+
+```
+scripts/demo_scenario.sh                 # 단계마다 Enter, 메모는 화면에서 직접 누름
+scripts/demo_scenario.sh --auto OUT      # 자동 진행, 단계별 캡처를 OUT에 저장
+VIDEO=1 PAUSE=7 scripts/demo_scenario.sh --auto OUT && FFMPEG=ffmpeg python3 scripts/make_video.py OUT
+                                         # 화면 녹화 + 자막 합성(OUT/baton_demo.mp4)
+```
+
+## 빌드
+
+```
+./gradlew assembleRelease   # app/build/outputs/apk/release/ (서명 키 파일이 없으면 서명 없이 빌드)
+./gradlew assembleDebug     # 개발용. 점검 화면 "Pleos Probe"가 함께 설치됨
+```
+
+Pleos SDK는 `settings.gradle.kts`의 Pleos Playground Maven 저장소에서 받습니다.
+
+## 구조
+
+| 파일 | 역할 |
+|---|---|
+| `RecorderService.kt` | 포그라운드 기록 서비스. 기어(AAOS GEAR_SELECTION) 변화로 운행 시작·종료를 판단하고, P 복귀 때 음성 안내, P 이탈 때 음성 중지 |
+| `BootReceiver.kt` | 부팅·사용자 잠금 해제·앱 갱신 때 기록 서비스 시작 |
+| `SessionRecorder.kt` | 운행 기록(누적 주행거리 차이), 재시작 복구, 기록 누락 구간, 메모 저장·삭제·30일 보관 |
+| `VehicleSnapshot.kt` | 운행 시작·종료 때 배터리·주행가능거리·경고등·운전석 문 상태를 읽음. 읽지 못한 항목은 null과 사유 |
+| `TripLog.kt` | 기록 파일을 화면용 운행·메모·누락 구간으로 읽음 |
+| `HandoverActivity.kt` | 바통 화면 3개(탑승 브리핑, 운행 목록, 하차 메모)와 음성 안내·음성 메모 |
+| `MainActivity.kt`, `P9Probe.kt`, `P10Probe.kt` | 개발 중 SDK 동작을 확인한 점검 화면(debug 빌드 전용). `P10Probe`의 정차 음성 안내는 제품 기능으로 씀 |
+
+기록은 앱 내부 저장소(`b1_records.jsonl`)에만 남고 서버로 보내지 않습니다. 메모 내용은 앱 로그에 남기지 않습니다.
+
+## 권한
+
+| 권한 | 용도 |
+|---|---|
+| `android.car.permission.CAR_POWERTRAIN` | 기어 상태 |
+| `pleos.car.permission.CAR_DRIVE` | 누적 주행거리 |
+| `pleos.car.permission.CAR_ENERGY`, `android.car.permission.CAR_ENERGY` | 배터리 잔량, 주행가능거리 |
+| `pleos.car.permission.CAR_SAFETY`, `pleos.car.permission.PRIVATE_CAR_SAFETY` | 경고등 조회. 에뮬레이터에서 `getTelltalesInfo`가 실행 시 PRIVATE_CAR_SAFETY를 요구함 |
+| `pleos.car.permission.CAR_DOORS`, `CAR_INFO` | 운전석 문 상태, 차량 정보 |
+| `pleos.car.permission.TTS_SERVICE`, `STT_SERVICE`, `android.permission.RECORD_AUDIO` | 정차 음성 안내, 음성 메모 |
+| `FOREGROUND_SERVICE_SPECIAL_USE`, `RECEIVE_BOOT_COMPLETED`, `POST_NOTIFICATIONS` | 화면 없이 운행 기록 |
+
+## 확인된 제약 (에뮬레이터 기준)
+
+- 앱이 정차 시 화면을 스스로 띄우는 것은 백그라운드 실행 제한으로 막혀, 음성으로 안내하고 사용자가 엽니다
+- 경고등 조회는 PRIVATE_CAR_SAFETY가 필요합니다. 배포본에서 부여되지 않으면 브리핑에 "경고등: 확인 안 됨"으로 표시합니다
+- 에뮬레이터 차량이 전기차라 내연기관 연료 잔량은 확인하지 못했습니다
+- 음성 인식은 인식 대기까지 확인했습니다. 오디오 포커스 상실 처리는 아직 없습니다
+- 실차의 전원 차단·절전 후 복귀는 확인하지 못했습니다
+
+## 점검 화면 (debug 빌드)
+
+개발 중 SDK와 플랫폼 동작을 확인하는 데 쓴 화면입니다. release 빌드에는 런처에 나오지 않습니다.
 
 | 버튼 | 확인 내용 |
 |---|---|
@@ -25,9 +104,4 @@ Pleos 공모전 사전 점검 앱. 차량 제어(set) API는 호출하지 않는
 | P10 (자동) | 서비스가 기어 P 복귀를 받으면 경고등 조회 + Pleos TTS 한 문장 + 화면 띄우기 시험(1 startActivity / 2 전체 화면 알림 / 3 헤드업 알림, 순번 files/p10_trial) |
 | P10 STT | Pleos SpeechToText(ON_DEVICE) 초기화·인식 요청, Android SpeechRecognizer 비교 |
 
-로그: Logcat 태그 `PleosProbe`, 앱 내부 파일 `files/probe_log.txt`
-
-```
-adb logcat -s PleosProbe
-adb exec-out run-as app.baton cat files/probe_log.txt > probe_log.txt
-```
+로그: Logcat 태그 `PleosProbe`, 앱 내부 파일 `files/probe_log.txt`(debug 빌드에서 `adb exec-out run-as app.baton cat files/probe_log.txt`)
