@@ -33,12 +33,15 @@ sleep 2
 post() { curl -sf -X POST "$C$1" -o /dev/null || { echo "콘솔 요청 실패: $1" >&2; exit 1; }; }
 gear() {
   curl -sf -X PUT "$C/vehicle/gear?gear=$1" -o /dev/null || { echo "기어 변경 실패: $1" >&2; exit 1; }
-  case $1 in Drive) cap console "기어 D (주행 시작)";; Park) cap console "기어 P (주차)";; esac
+  case $1 in Drive) TRIP0=$LAST; cap console "기어 D (주행 시작)";; Park) cap console "기어 P (주차)";; esac
 }
 soc() { post "/vehicle/ev-battery?field=soc&value=$1"; cap console "배터리 $1%"; }
 # 콘솔은 누적 주행거리 감소를 거부한다(traveled_distance_must_not_decrease). 시작 값 기준으로 더한다
-BASE=0
-odo() { post "/vehicle/odometer?traveled_distance_km=$(python3 -c "print(round($BASE + $1, 1))")"; cap console "누적 주행거리 +$1 km"; }
+BASE=0; LAST=0; TRIP0=0
+odo() {
+  post "/vehicle/odometer?traveled_distance_km=$(python3 -c "print(round($BASE + $1, 1))")"; LAST=$1
+  cap console "누적 주행거리 시작 대비 +$1 km (이번 운행 +$(python3 -c "print(round($1 - $TRIP0, 1))") km)"
+}
 range_km() { post "/vehicle/odometer?remaining_range_m=$(( $1 * 1000 ))"; cap console "주행가능거리 $1 km"; }
 tpms() { post "/vehicle/telltales/simulator?type=TPMS&state=$1&color=Yellow"; [ $1 = On ] && cap console "타이어 공기압 경고등 켜짐" || true; }
 
@@ -103,8 +106,8 @@ gear Drive; sleep 3
 odo 21; soc 73; range_km 365; sleep 2
 tpms On; odo 42.6; soc 64; range_km 320; sleep 2
 gear Park
-cap voice "음성 안내: 운행이 끝났습니다. 다음 운전자에게 남길 말이 있으면 바통을 열어 주세요."
-pause "운행 종료. 바통이 하차 메모 화면을 보여 준다" "하차메모_B"
+cap voice "안내 문구 예시(음성 출력 미수록): 운행이 끝났습니다. 다음 운전자에게 남길 말이 있으면 바통을 열어 주세요."
+pause "미리 열어 둔 바통이 주차 후 다시 보이며 하차 메모를 표시" "하차메모_B"
 memo "운전자 B" "충전 필요"
 pause "메모 저장 후 탑승 브리핑(다음 운전자가 볼 화면)" "탑승브리핑"
 

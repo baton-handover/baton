@@ -88,13 +88,11 @@ class HandoverActivity : Activity() {
         B1.onLeavePark += stopSpeech
     }
 
-    // 기록 파일이 바뀌면 다시 읽는다. 주행 중 차단 화면이 걷힐 때 생명주기 콜백(onResume·포커스)이 오지 않는 경우가 있어
-    // 이벤트에 기대지 않고 화면이 떠 있는 동안 2초마다 파일 수정 시각만 확인한다
-    private var lastModified = -1L
+    // 주행 중 차단 화면이 걷힐 때 생명주기 콜백(onResume·포커스)이 오지 않는 경우가 있고, 메모 만료는 파일이 바뀌지 않아도
+    // 시간만으로 일어나므로, 화면이 떠 있는 동안 2초마다 다시 읽는다(기록 파일은 수십 KB 이하)
     private val poll = object : Runnable {
         override fun run() {
-            val m = java.io.File(filesDir, "b1_records.jsonl").lastModified()
-            if (m != lastModified) { lastModified = m; refresh() }
+            refresh()
             body.postDelayed(this, 2000)
         }
     }
@@ -129,13 +127,20 @@ class HandoverActivity : Activity() {
     }
 
     private var shownTripTs: Long? = null
+    private var shownNotes: Map<Long, TripLog.Note>? = null
+    private var shownTab = 0
 
     /** 새 운행이 생겼을 때만 시작 화면을 다시 고른다. 같은 운행이면 사용자가 보던 탭과 선택을 그대로 둔다 */
     private fun refresh() {
-        B1.recorder?.purgeOldNotes()  // 서비스가 오래 떠 있어도 열람 전에 만료 메모를 지운다(TripLog도 만료 메모는 읽지 않는다)
+        B1.recorder?.purgeOldNotes()  // 서비스가 오래 떠 있어도 열람 전에 만료 메모를 지운다(실패해도 TripLog가 만료 메모를 읽지 않는다)
         val log = TripLog(filesDir)
         val latest = log.latest
-        if (shownTripTs != null && shownTripTs == latest?.startTs) return
+        if (shownTripTs != null && shownTripTs == latest?.startTs) {
+            // 같은 운행이라도 메모가 만료·삭제·추가되면 브리핑·목록·QR·음성 버튼이 쥔 옛 메모를 버리고 다시 그린다.
+            // 하차 메모 탭은 작성 중인 선택을 지키기 위해 그대로 둔다(그 탭은 이전 메모 내용을 보여 주지 않는다)
+            if (log.notes != shownNotes && shownTab != 2) show(shownTab)
+            return
+        }
         shownTripTs = latest?.startTs
         selDriver = null; selItems.clear(); voiceText = null
         // 방금 주차한 운전자는 하차 메모부터, 시간이 지난 뒤 연 다음 운전자는 브리핑부터(메모 미작성은 브리핑에 표시)
@@ -144,6 +149,8 @@ class HandoverActivity : Activity() {
     }
 
     private fun show(tab: Int) {
+        shownTab = tab
+        cancelListen()  // 탭을 옮기면 진행 중이던 음성 인식을 버린다
         tabs.forEachIndexed { i, t ->
             t.setTextColor(if (i == tab) Color.WHITE else cText)
             t.background = rounded(if (i == tab) cPrimary else cCard, if (i == tab) cPrimary else cBorder)
@@ -151,6 +158,7 @@ class HandoverActivity : Activity() {
         }
         body.removeAllViews()
         val log = TripLog(filesDir)
+        shownNotes = log.notes
         when (tab) {
             0 -> briefing(log)
             1 -> tripList(log)
@@ -377,16 +385,30 @@ class HandoverActivity : Activity() {
         runCatching { tts?.speak(text, true) }
     }
 
+    // 음성 인식 요청 세대. P 이탈·탭 이동·화면 종료 때 올려서, 그 전에 시작한 초기화·결과 콜백을 무효로 만든다
+    @Volatile private var sttGen = 0
+    private fun sttValid(gen: Int) = gen == sttGen && B1.recorder?.isParked() == true && !isFinishing && !isDestroyed
+
+    private fun cancelListen() {
+        sttGen++
+        runCatching { stt?.stop() }
+    }
+
     private fun listen(out: TextView) {
+        val gen = ++sttGen
+        if (!sttValid(gen)) { out.text = "음성 메모는 정차(P) 상태에서만 남길 수 있습니다."; return }
         out.text = "음성 인식 준비 중..."
         runCatching {
             stt?.release()
             stt = SpeechToText(this, ai.pleos.playground.stt.constant.Mode.ON_DEVICE).also { s ->
                 s.initialize(object : ai.pleos.playground.stt.listener.OnInitializeListener {
                     override fun onSuccess() {
+                        // 초기화를 기다리는 사이 출발했거나 탭을 옮겼으면 인식을 시작하지 않는다
+                        if (!sttValid(gen)) { android.util.Log.i("PleosProbe", "E 화면 STT 시작 취소(무효 요청)"); return }
                         // addListener는 initialize 성공 뒤에 해야 한다(P10 확인)
                         s.addListener(object : ai.pleos.playground.stt.listener.ResultListener {
                             override fun onUpdated(text: String, isFinal: Boolean) = runOnUiThread {
+                                if (!sttValid(gen)) return@runOnUiThread  // 취소된 요청의 결과는 메모에 넣지 않는다
                                 out.text = "음성 메모: \"$text\""
                                 if (isFinal) voiceText = text
                             }
@@ -410,11 +432,12 @@ class HandoverActivity : Activity() {
     private val stopSpeech: () -> Unit = {
         android.util.Log.i("PleosProbe", "E 화면 P 이탈: 중지 요청")
         runCatching { tts?.stop() }
-        runCatching { stt?.stop() }
+        cancelListen()
     }
 
     override fun onDestroy() {
         B1.onLeavePark -= stopSpeech
+        sttGen++
         runCatching { stt?.release() }
         runCatching { tts?.release() }
         super.onDestroy()

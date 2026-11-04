@@ -41,7 +41,7 @@ def dlg(a, b, style, pos, text):
     return "Dialogue: 0,%s,%s,%s,,0,0,0,,{\\pos(%d,%d)}%s" % (ts(a), ts(b), style, pos[0], pos[1], text)
 
 lines = [dlg(0, end, "Note", (1890, 912), "차량 값: Pleos Connect 에뮬레이터 가상 콘솔 입력  |  화면: 실제 앱(release 빌드)")]
-prefix = {"console": "가상 콘솔 입력  ", "user": "운전자 조작(시연용 자동 입력)  ", "voice": "(영상에는 소리 없음) "}
+prefix = {"console": "가상 콘솔 입력  ", "user": "운전자 조작(시연용 자동 입력)  ", "voice": ""}
 # 콘솔 입력은 1초 안에 연달아 온 것을 한 줄로 묶는다
 inputs = []
 for t, k, x in ev:

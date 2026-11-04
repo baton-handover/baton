@@ -214,16 +214,16 @@ class SessionRecorder(
     /** 원본을 직접 덮어쓰지 않고 임시 파일에 쓴 뒤 바꿔 끼운다. 쓰기·교체가 실패하면 원본을 건드리지 않고 false */
     private fun rewriteDropping(drop: (JSONObject) -> Boolean): Boolean {
         if (!recordFile.exists()) return true
-        val lines = recordFile.readLines()
-        val kept = lines.filterNot { runCatching { drop(JSONObject(it)) }.getOrDefault(false) }
-        if (kept.size == lines.size) return true
         val tmp = File(recordFile.parentFile, recordFile.name + ".tmp")
-        val ok = runCatching {
+        // 원본 읽기부터 교체까지 한 덩어리로 실패를 잡는다(읽기 실패도 예외로 새지 않고 false)
+        return runCatching {
+            val lines = recordFile.readLines()
+            val kept = lines.filterNot { runCatching { drop(JSONObject(it)) }.getOrDefault(false) }
+            if (kept.size == lines.size) return@runCatching
             java.io.FileOutputStream(tmp).use { out -> out.write(kept.joinToString("") { it + "\n" }.toByteArray()); out.fd.sync() }
             check(tmp.renameTo(recordFile)) { "renameTo false" }
+            log("E 메모 ${lines.size - kept.size}건 삭제")
         }.onFailure { log("E 메모 삭제 실패, 원본 유지: $it"); tmp.delete() }.isSuccess
-        if (ok) log("E 메모 ${lines.size - kept.size}건 삭제")
-        return ok
     }
 
     @Synchronized
