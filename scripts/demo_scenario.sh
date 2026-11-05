@@ -101,15 +101,15 @@ if [ -n "$CAPF" ]; then
   trap 'kill $HB 2>/dev/null; $ADB shell pkill -INT screenrecord 2>/dev/null' EXIT
 fi
 
-scene "장면 1  운전자 B의 운행 (도중에 타이어 공기압 경고등)"
+scene "장면 1  운전자 B의 운행 (배터리 82%에서 64%로)"
 gear Drive; sleep 3
 odo 21; soc 73; range_km 365; sleep 2
-tpms On; odo 42.6; soc 64; range_km 320; sleep 2
+odo 42.6; soc 64; range_km 320; sleep 2
 gear Park
 cap voice "안내 문구 예시(음성 출력 미수록): 운행이 끝났습니다. 다음 운전자에게 남길 말이 있으면 바통을 열어 주세요."
 pause "미리 열어 둔 바통이 주차 후 다시 보이며 하차 메모를 표시" "하차메모_B"
 memo "운전자 B" "충전 필요"
-pause "메모 저장 후 탑승 브리핑(다음 운전자가 볼 화면)" "탑승브리핑"
+pause "메모 저장 후 탑승 브리핑(다음 운전자가 볼 화면). 경고등은 공개 권한으로 조회되지 않아 '확인 안 됨'으로 표시" "탑승브리핑"
 
 scene "장면 2  다음 운전자 A가 거래처 두 곳을 들른다"
 gear Drive; sleep 3

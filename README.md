@@ -1,6 +1,6 @@
 # 바통
 
-여러 사람이 공용 프로필로 함께 쓰는 Pleos 차량에서, 운행 전후의 주행거리·배터리·경고등을 차량에서 직접 읽어 하차 메모와 함께 기록하고, 다음 운전자가 정차 중 같은 차량 화면에서 직전 운행의 인계 내용을 확인하는 차량용 앱입니다.
+여러 사람이 공용 프로필로 함께 쓰는 Pleos 차량에서, 운행 전후의 주행거리·배터리·주행가능거리를 차량에서 직접 읽어 하차 메모와 함께 기록하고, 다음 운전자가 정차 중 같은 차량 화면에서 직전 운행의 인계 내용을 확인하는 차량용 앱입니다.
 
 ## APK 위치
 
@@ -25,7 +25,7 @@
 3. Virtual Console에서 기어를 D로 바꾸고 주행거리·배터리 값을 바꾼 뒤 P로 돌아오면 한 운행이 기록됩니다. 주행 중에는 플랫폼이 앱 화면을 가립니다.
 4. 정차 중 바통을 열면 다음 화면을 볼 수 있습니다.
    - 하차 메모: 방금 끝난 운행에 운전자를 선택하고 상태 선택지를 남깁니다
-   - 탑승 브리핑: 직전 운행 종료 시점의 배터리·주행가능거리·경고등과 이전 운전자 메모
+   - 탑승 브리핑: 직전 운행 종료 시점의 배터리·주행가능거리와 이전 운전자 메모(경고등은 조회될 때만)
    - 운행 목록: 이번 달 운행과 월 요약 QR
 
 ## 시연 재현
@@ -69,7 +69,7 @@ Pleos SDK는 `settings.gradle.kts`의 Pleos Playground Maven 저장소에서 받
 | `android.car.permission.CAR_POWERTRAIN` | 기어 상태 |
 | `pleos.car.permission.CAR_DRIVE` | 누적 주행거리 |
 | `pleos.car.permission.CAR_ENERGY`, `android.car.permission.CAR_ENERGY` | 배터리 잔량, 주행가능거리 |
-| `pleos.car.permission.CAR_SAFETY`, `pleos.car.permission.PRIVATE_CAR_SAFETY` | 경고등 조회. 에뮬레이터에서 `getTelltalesInfo`가 실행 시 PRIVATE_CAR_SAFETY를 요구함 |
+| `pleos.car.permission.CAR_SAFETY` | 경고등 조회(공개 문서 기준). release는 공개 문서에 없는 PRIVATE_CAR_SAFETY를 선언하지 않음 |
 | `pleos.car.permission.CAR_DOORS`, `CAR_INFO` | 운전석 문 상태, 차량 정보 |
 | `pleos.car.permission.TTS_SERVICE`, `STT_SERVICE`, `android.permission.RECORD_AUDIO` | 정차 음성 안내, 음성 메모 |
 | `FOREGROUND_SERVICE_SPECIAL_USE`, `RECEIVE_BOOT_COMPLETED`, `POST_NOTIFICATIONS` | 화면 없이 운행 기록 |
@@ -77,7 +77,7 @@ Pleos SDK는 `settings.gradle.kts`의 Pleos Playground Maven 저장소에서 받
 ## 확인된 제약 (에뮬레이터 기준)
 
 - 앱이 정차 시 화면을 스스로 띄우는 것은 백그라운드 실행 제한으로 막혀, 음성으로 안내하고 사용자가 엽니다
-- 경고등 조회는 PRIVATE_CAR_SAFETY가 필요합니다. 배포본에서 부여되지 않으면 브리핑에 "경고등: 확인 안 됨"으로 표시합니다
+- 에뮬레이터에서 경고등 조회(`getTelltalesInfo`)는 공개 문서에 없는 PRIVATE_CAR_SAFETY를 요구합니다. App Market 심사는 승인된 권한만 허용하므로 release는 이 권한을 빼고, 브리핑에 "경고등: 확인 안 됨"으로 표시합니다(점검용 debug 빌드는 선언)
 - 에뮬레이터 차량이 전기차라 내연기관 연료 잔량은 확인하지 못했습니다
 - 음성 인식은 인식 대기까지 확인했습니다. 오디오 포커스 상실 처리는 아직 없습니다
 - 실차의 전원 차단·절전 후 복귀는 확인하지 못했습니다
