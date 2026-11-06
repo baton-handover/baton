@@ -9,7 +9,14 @@ import android.car.Car
 import android.car.VehiclePropertyIds
 import android.car.hardware.CarPropertyValue
 import android.car.hardware.property.CarPropertyManager
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.ApplicationInfo
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.content.pm.ServiceInfo
 import android.os.Handler
 import android.os.IBinder
@@ -40,6 +47,21 @@ class RecorderService : Service() {
     private var cpm: CarPropertyManager? = null
     private var p10: P10Probe? = null
     private var lastGear: Int? = null
+
+    // 점검용(debug 빌드만 등록): 다른 앱의 포커스 요청을 흉내 낸다.
+    // adb shell am broadcast --user 10 -a app.baton.FOCUS_TEST --es usage call|nav --el ms 5000
+    private val focusTest = object : BroadcastReceiver() {
+        override fun onReceive(c: Context, i: Intent) {
+            val nav = i.getStringExtra("usage") == "nav"
+            val req = AudioFocusRequest.Builder(if (nav) AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK else AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+                .setAudioAttributes(AudioAttributes.Builder().setUsage(if (nav) AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE else AudioAttributes.USAGE_VOICE_COMMUNICATION).build())
+                .setOnAudioFocusChangeListener { slog("FT 포커스 변경 $it") }.build()
+            val am = getSystemService(AudioManager::class.java)
+            slog("FT 포커스 요청 ${if (nav) "nav" else "call"} 결과 ${am.requestAudioFocus(req)}")
+            main.postDelayed({ am.abandonAudioFocusRequest(req); slog("FT 포커스 반납") }, i.getLongExtra("ms", 5000))
+        }
+    }
+    private val debuggable get() = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
 
     private fun slog(msg: String) {
         Log.i("PleosProbe", "S $msg")
@@ -83,6 +105,7 @@ class RecorderService : Service() {
         B1.recorder = rec
         rec.purgeOldNotes()
         p10 = P10Probe(this, { vehicle }, ::slog)
+        if (debuggable) registerReceiver(focusTest, IntentFilter("app.baton.FOCUS_TEST"), RECEIVER_EXPORTED)
         // Vehicle 서비스 연결(IPC)이 끝날 시간을 준 뒤 복구·구독
         main.postDelayed({
             rec.recover(runCatching { cpm?.getIntProperty(VehiclePropertyIds.GEAR_SELECTION, 0) }.getOrNull())
@@ -101,6 +124,7 @@ class RecorderService : Service() {
         slog("서비스 onDestroy")
         runCatching { cpm?.unregisterCallback(gearCallback) }
         p10?.release()
+        if (debuggable) runCatching { unregisterReceiver(focusTest) }
         runCatching { vehicle?.release() }
         runCatching { car?.disconnect() }
         B1.recorder = null

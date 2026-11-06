@@ -34,8 +34,11 @@ class P10Probe(
     private val nm = ctx.getSystemService(NotificationManager::class.java)
     private var tts: TextToSpeech? = null
     private var ttsReady = false
+    private val focus = SpeechFocus.forSpeech(ctx)
+    private val stopOnLoss: () -> Unit = { log("P10 포커스 상실: TTS 중지"); runCatching { tts?.stop() } }
 
     init {
+        SpeechFocus.ttsStoppers += stopOnLoss
         nm.createNotificationChannel(NotificationChannel("p10", "정차 알림 점검", NotificationManager.IMPORTANCE_HIGH))
         log("P10 알림 권한 허용=${nm.areNotificationsEnabled()} 전체화면 알림 허용=${nm.canUseFullScreenIntent()}")
         runCatching {
@@ -47,9 +50,9 @@ class P10Probe(
                         t.addEventListener(object : EventListener {
                             override fun onStart() = log("P10 TTS 발화 시작")
                             override fun onReady() = log("P10 TTS onReady")
-                            override fun onDone() = log("P10 TTS 발화 끝")
-                            override fun onError(e: ErrorType) = log("P10 TTS 오류 $e")
-                            override fun onStop() = log("P10 TTS 중지")
+                            override fun onDone() { log("P10 TTS 발화 끝"); focus.release() }
+                            override fun onError(e: ErrorType) { log("P10 TTS 오류 $e"); focus.release() }
+                            override fun onStop() { log("P10 TTS 중지"); focus.release() }
                             override fun onUpdatedRms(rms: Double) {}
                         })
                         runCatching { t.setLocale(Locale.KOREA) }
@@ -71,9 +74,10 @@ class P10Probe(
             { e: Exception -> log("P10 서비스에서 경고등 조회 실패: ${e.javaClass.simpleName} ${e.message}") }
         ) ?: log("P10 Vehicle 없음")
 
-        if (ttsReady) {
+        if (ttsReady && !focus.acquire()) log("P10 포커스 거부: 안내하지 않음")
+        else if (ttsReady) {
             runCatching { tts?.speak("운행이 끝났습니다. 다음 운전자에게 남길 말이 있으면 바통을 열어 주세요.", true) }
-                .onSuccess { log("P10 TTS speak 호출") }.onFailure { log("P10 TTS speak 예외: $it") }
+                .onSuccess { log("P10 TTS speak 호출") }.onFailure { log("P10 TTS speak 예외: $it"); focus.release() }
         } else log("P10 TTS 준비 안 됨")
 
         val open = Intent(ctx, MainActivity::class.java)
@@ -107,9 +111,12 @@ class P10Probe(
 
     fun stopSpeech() {
         log("P10 P 이탈: TTS 중지 요청"); runCatching { tts?.stop() }.onFailure { log("P10 TTS 중지 요청 실패: $it") }
+        focus.release()
     }
 
     fun release() {
+        SpeechFocus.ttsStoppers -= stopOnLoss
+        focus.release()
         runCatching { tts?.release() }
     }
 }

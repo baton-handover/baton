@@ -54,6 +54,10 @@ class HandoverActivity : Activity() {
     private var tts: TextToSpeech? = null
     private var ttsReady = false
     private var stt: SpeechToText? = null
+    private val ttsFocus by lazy { SpeechFocus.forSpeech(this) }
+    private val stopTtsOnLoss: () -> Unit = { runCatching { tts?.stop() } }
+    private val sttFocus by lazy { SpeechFocus.forListen(this, { android.util.Log.i("PleosProbe", "E 화면 $it") }) { runOnUiThread { cancelListen(); sttOut?.text = "다른 소리가 나와 음성 인식을 멈췄습니다." } } }
+    private var sttOut: TextView? = null
 
     // 하차 메모 입력 상태
     private var selDriver: String? = null
@@ -84,7 +88,7 @@ class HandoverActivity : Activity() {
         root.addView(tabRow)
         root.addView(ScrollView(this).apply { addView(body) }, LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f))
         setContentView(root)
-        initTts()
+        initTts(); SpeechFocus.ttsStoppers += stopTtsOnLoss
         B1.onLeavePark += stopSpeech
     }
 
@@ -368,9 +372,9 @@ class HandoverActivity : Activity() {
                         t.addEventListener(object : ai.pleos.playground.tts.listener.EventListener {
                             override fun onStart() { android.util.Log.i("PleosProbe", "E 화면 TTS 발화 시작") }
                             override fun onReady() {}
-                            override fun onDone() { android.util.Log.i("PleosProbe", "E 화면 TTS 발화 끝") }
-                            override fun onError(e: ai.pleos.playground.tts.constant.ErrorType) { android.util.Log.i("PleosProbe", "E 화면 TTS 오류 $e") }
-                            override fun onStop() { android.util.Log.i("PleosProbe", "E 화면 TTS 중지됨") }
+                            override fun onDone() { android.util.Log.i("PleosProbe", "E 화면 TTS 발화 끝"); ttsFocus.release() }
+                            override fun onError(e: ai.pleos.playground.tts.constant.ErrorType) { android.util.Log.i("PleosProbe", "E 화면 TTS 오류 $e"); ttsFocus.release() }
+                            override fun onStop() { android.util.Log.i("PleosProbe", "E 화면 TTS 중지됨"); ttsFocus.release() }
                             override fun onUpdatedRms(rms: Double) {}
                         })
                     }
@@ -382,7 +386,8 @@ class HandoverActivity : Activity() {
 
     private fun speak(text: String) {
         if (!ttsReady) return toast("음성 안내를 준비하지 못했습니다.")
-        runCatching { tts?.speak(text, true) }
+        if (!ttsFocus.acquire()) return toast("지금은 다른 소리가 우선이라 음성으로 안내하지 않습니다.")
+        runCatching { tts?.speak(text, true) }.onFailure { ttsFocus.release() }
     }
 
     // 음성 인식 요청 세대. P 이탈·탭 이동·화면 종료 때 올려서, 그 전에 시작한 초기화·결과 콜백을 무효로 만든다
@@ -392,12 +397,16 @@ class HandoverActivity : Activity() {
     private fun cancelListen() {
         sttGen++
         runCatching { stt?.stop() }
+        sttFocus.release()
     }
 
     private fun listen(out: TextView) {
         val gen = ++sttGen
         if (!sttValid(gen)) { out.text = "음성 메모는 정차(P) 상태에서만 남길 수 있습니다."; return }
+        sttOut = out
+        if (!sttFocus.acquire()) { out.text = "지금은 다른 소리가 우선이라 음성 인식을 시작하지 않습니다."; return }
         out.text = "음성 인식 준비 중..."
+        var ended = false
         runCatching {
             stt?.release()
             stt = SpeechToText(this, ai.pleos.playground.stt.constant.Mode.ON_DEVICE).also { s ->
@@ -410,28 +419,30 @@ class HandoverActivity : Activity() {
                             override fun onUpdated(text: String, isFinal: Boolean) = runOnUiThread {
                                 if (!sttValid(gen)) return@runOnUiThread  // 취소된 요청의 결과는 메모에 넣지 않는다
                                 out.text = "음성 메모: \"$text\""
-                                if (isFinal) voiceText = text
+                                if (isFinal) { ended = true; voiceText = text; sttFocus.release() }
                             }
                             override fun onUpdatedEpdData(a: Long, b: Long) {}
                             override fun onStartedRecognition() = runOnUiThread { out.text = "듣고 있습니다..." }
-                            override fun onEndedRecognition() {}
-                            override fun onError(e: ai.pleos.playground.stt.constant.ErrorType) = runOnUiThread { out.text = "음성 인식 실패: $e" }
+                            override fun onEndedRecognition() { ended = true; sttFocus.release() }
+                            override fun onError(e: ai.pleos.playground.stt.constant.ErrorType) = runOnUiThread { ended = true; sttFocus.release(); out.text = "음성 인식 실패: $e" }
                             override fun onReady() = runOnUiThread { out.text = "말씀해 주세요." }
                             override fun onUpdatedRms(rms: Double) {}
                         })
                         runCatching { s.setLocale(Locale.KOREA); s.request() }
+                        // 말이 없으면 플랫폼은 계속 기다리고 포커스(다른 소리 멈춤)도 계속 잡힌다(11/6 확인, 30초 이상). 15초에서 끊는다
+                        body.postDelayed({ if (sttValid(gen) && !ended) { cancelListen(); out.text = "말씀이 없어 음성 인식을 멈췄습니다. 다시 누르면 다시 듣습니다." } }, 15000)
                     }
-                    override fun onFailure(e: ai.pleos.playground.stt.constant.ErrorType) = runOnUiThread { out.text = "음성 인식을 시작하지 못했습니다: $e" }
+                    override fun onFailure(e: ai.pleos.playground.stt.constant.ErrorType) = runOnUiThread { sttFocus.release(); out.text = "음성 인식을 시작하지 못했습니다: $e" }
                 })
             }
-        }.onFailure { out.text = "음성 인식을 시작하지 못했습니다." }
+        }.onFailure { sttFocus.release(); out.text = "음성 인식을 시작하지 못했습니다." }
     }
 
     // 주행 중에는 화면만 막히고 이미 시작한 음성은 계속될 수 있어 직접 멈춘다
-    // shortcut: 오디오 포커스 상실은 처리하지 않음(Pleos TTS의 포커스 요청 여부를 에뮬레이터에서 확인 못 함), 실차·SDK 문서로 확인되면 추가
     private val stopSpeech: () -> Unit = {
         android.util.Log.i("PleosProbe", "E 화면 P 이탈: 중지 요청")
         runCatching { tts?.stop() }
+        ttsFocus.release()
         cancelListen()
     }
 
@@ -440,6 +451,8 @@ class HandoverActivity : Activity() {
         sttGen++
         runCatching { stt?.release() }
         runCatching { tts?.release() }
+        SpeechFocus.ttsStoppers -= stopTtsOnLoss
+        sttFocus.release()  // 안내 음성 포커스는 서비스와 함께 쓰므로 여기서 반납하지 않는다(끝 신호에서 반납)
         super.onDestroy()
     }
 

@@ -58,6 +58,7 @@ Pleos SDK는 `settings.gradle.kts`의 Pleos Playground Maven 저장소에서 받
 | `VehicleSnapshot.kt` | 운행 시작·종료 때 배터리·주행가능거리·경고등·운전석 문 상태를 읽음. 읽지 못한 항목은 null과 사유 |
 | `TripLog.kt` | 기록 파일을 화면용 운행·메모·누락 구간으로 읽음 |
 | `HandoverActivity.kt` | 바통 화면 3개(탑승 브리핑, 운행 목록, 하차 메모)와 음성 안내·음성 메모 |
+| `SpeechFocus.kt` | 음성 안내·음성 인식의 오디오 포커스 요청·반납·상실 처리 |
 | `MainActivity.kt`, `P9Probe.kt`, `P10Probe.kt` | 개발 중 SDK 동작을 확인한 점검 화면. release APK에도 클래스는 남지만 런처와 외부 진입을 막았고 debug 빌드에서만 열 수 있음. `P10Probe`의 정차 음성 안내는 제품 기능으로 씀 |
 
 기록은 앱 내부 저장소(`b1_records.jsonl`)에만 남고 서버로 보내지 않습니다. 메모 내용은 앱 로그에 남기지 않습니다.
@@ -79,7 +80,8 @@ Pleos SDK는 `settings.gradle.kts`의 Pleos Playground Maven 저장소에서 받
 - 앱이 정차 시 화면을 스스로 띄우는 것은 백그라운드 실행 제한으로 막혀, 음성으로 안내하고 사용자가 엽니다
 - 에뮬레이터에서 경고등 조회(`getTelltalesInfo`)는 공개 문서에 없는 PRIVATE_CAR_SAFETY를 요구합니다. App Market 심사는 승인된 권한만 허용하므로 release는 이 권한을 빼고, 브리핑에 "경고등: 확인 안 됨"으로 표시합니다(점검용 debug 빌드는 선언)
 - 에뮬레이터 차량이 전기차라 내연기관 연료 잔량은 확인하지 못했습니다
-- 음성 인식은 인식 대기까지 확인했습니다. 오디오 포커스 상실 처리는 아직 없습니다
+- 음성 인식은 에뮬레이터 호스트 마이크 입력(`adb emu avd hostmicon`)으로 인식 결과까지 확인했습니다
+- 음성 안내·인식은 시작 전에 오디오 포커스를 요청하고, 거부되면 시작하지 않으며, 잃으면 멈추고 반납합니다. Pleos TTS 서비스는 재생 중 포커스를 스스로 잡지 않아 앱이 요청합니다. 점검은 debug 빌드에서 `scripts/focus_test.sh`(통화·내비 포커스 흉내)로 재현합니다
 - 실차의 전원 차단·절전 후 복귀는 확인하지 못했습니다
 
 ## 점검 화면 (debug 빌드)
