@@ -13,6 +13,7 @@
 ## 테스트 환경
 
 - Pleos Connect v2.1.0 에뮬레이터(AAOS, AVD `Pleos_Connect_v2.1.0`). 앱은 Android 사용자 10(운전자 프로필)에서 실행됩니다
+- 에뮬레이터 규격: Android 14(API 34) 시스템 이미지 `pleos_car_emulator`(arm64-v8a), 화면 2560×1440, 160dpi, RAM 4GB. 개발 호스트는 Apple Silicon Mac
 - Pleos Playground SDK: Vehicle 2.3.2, TextToSpeech 3.3.1, SpeechToText 3.3.1
 - 호스트 도구: adb(platform-tools). 시연 스크립트는 bash, curl, python3가 필요합니다. 빌드에는 JDK 17과 Android SDK 35가 필요합니다
 - 차량 값은 에뮬레이터 Virtual Console(`adb forward tcp:8088 tcp:8088` 후 http://127.0.0.1:8088)로 바꿉니다. 앱은 차량 값을 읽기만 하고 차량 제어(set) API는 호출하지 않습니다
